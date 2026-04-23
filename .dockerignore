@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+*.log
+chroma_db/
+*.py.bak
+add_feedback_endpoint.py
+patch_stats.py
+e2e_test.py
+build_vector_db.py
