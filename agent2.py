@@ -23,7 +23,6 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
-from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 
 # ─── Konfiguration ───────────────────────────────────────────────────────────
@@ -36,7 +35,7 @@ AIRTABLE_HEADERS = {
 CONTENT_TABLE_URL = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/Content%20Bibliothek"
 PIPELINE_TABLE_URL = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/Content%20Pipeline"
 CHROMA_PATH = os.environ.get("CHROMA_PATH", "/home/ubuntu/agent2/chroma_db")
-EMBEDDING_MODEL = "paraphrase-multilingual-mpnet-base-v2"
+EMBEDDING_MODEL = "text-embedding-3-small"  # OpenAI Embedding Modell
 POLL_INTERVAL = 120  # Sekunden zwischen Polling-Durchläufen
 
 # Airtable Status-Werte (angepasst an vorhandene Optionen)
@@ -48,8 +47,6 @@ STATUS_FEHLER = "💡 Idee"                     # Bei Fehler zurück auf Idee
 # ─── Initialisierung ─────────────────────────────────────────────────────────
 print("Initialisiere Agent 2 (Mission Mindset Content-Matcher)...")
 
-print("  Lade Embedding-Modell...")
-embedding_model = SentenceTransformer(EMBEDDING_MODEL)
 
 print("  Verbinde mit Vektordatenbank...")
 chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
@@ -129,9 +126,14 @@ def semantic_search(hook: str, n_results: int = 5) -> list:
     if collection.count() == 0:
         return []
     
-    query_embedding = embedding_model.encode([hook])[0]
+    # OpenAI Embedding für den Query
+    query_response = client.embeddings.create(
+        model=EMBEDDING_MODEL,
+        input=[hook]
+    )
+    query_embedding = query_response.data[0].embedding
     results = collection.query(
-        query_embeddings=[query_embedding.tolist()],
+        query_embeddings=[query_embedding],
         n_results=min(n_results, collection.count())
     )
     
@@ -318,10 +320,15 @@ def sync_vector_db() -> int:
             "transkript_preview": transcript[:8000]
         })
     
-    embeddings = embedding_model.encode(texts, batch_size=16)
+    # OpenAI Embeddings für alle Texte
+    embedding_response = client.embeddings.create(
+        model=EMBEDDING_MODEL,
+        input=texts
+    )
+    embeddings = [e.embedding for e in embedding_response.data]
     collection.add(
         ids=ids,
-        embeddings=embeddings.tolist(),
+        embeddings=embeddings,
         documents=[t[:2000] for t in texts],
         metadatas=metadatas
     )
